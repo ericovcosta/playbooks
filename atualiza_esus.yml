@@ -1,0 +1,56 @@
+---
+- name: Atualiza versão do e-SUS
+  hosts: '{{target|default("ESUS_PROD")}}'
+
+  vars:
+    new_version: 5.2.35
+    endereco: https://arquivos.esusab.ufsc.br/PEC/QJZOytQZjokbblfJ/5.2.35/eSUS-AB-PEC-5.2.35-Linux64.jar
+    arquivo: "eSUS-AB-PEC-{{new_version}}-Linux64.jar"
+
+  tasks:
+  #task 0
+  - name: Verifica se o {{arquivo}} já existe
+    ansible.builtin.stat:
+     path: "~/Downloads/{{arquivo}}"
+    register: file_exist
+    ignore_errors: true
+
+  # task 0.1
+  - name: Verifica se {{arquivo}} existe
+    ansible.builtin.debug:
+     var: file_exist
+
+  #task 1
+  - name: Download da versão {{new_version}}
+    ansible.builtin.command:
+     cmd: wget -q "{{endereco}}"
+    args:
+     chdir: ~/Downloads/
+    register: down_ok
+    ignore_errors: true
+    when: file_exist.stat.exists is false
+
+  #task 1.1
+  - name: Verifica o download
+    ansible.builtin.debug:
+     var: down_ok
+
+  #task 1.2
+  - name: Verifica se o {{arquivo}} foi baixado
+    ansible.builtin.stat:
+     path: "~/Downloads/{{arquivo}}"
+    register: file_ok
+    ignore_errors: true
+    when: down_ok.changed is true
+
+  #task 2
+  - name: Instalação para versão {{new_version}}
+    ansible.builtin.command:
+     cmd: java -jar "{{arquivo}}" -continue -backup -console
+    args:
+     chdir: /home/{{ansible_ssh_user}}/Downloads/
+    become: yes
+    become_method: sudo
+    when:
+     - file_exist.stat.exists is true or down_ok.changed is true and file_ok.stat.exists is true
+...

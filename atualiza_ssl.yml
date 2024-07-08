@@ -1,0 +1,103 @@
+---
+- name: Atualiza Certificado SSL (Let's Engrypt)
+  hosts: '{{target|default("ESUS_PROD")}}'
+  remote_user: '{{user|default("ansible_ssh_user")}}' 
+  vars:
+    senhap12: '{{pw12|default(p12_pw_esus)}}'
+    dominio: '{{url|default(url_esus)}}'
+
+  tasks:
+  #task 0
+  - name: Verifica Apache
+    ansible.builtin.systemd_service:
+      name: apache2.service
+    register: status_apache
+
+  - name: debug status apache 
+    ansible.builtin.debug:
+      var: status_apache.status.ActiveState
+  
+  #task 1
+  - name: Parando Apache
+    ansible.builtin.service:
+      name: apache2.service
+      state: stopped
+    become: yes
+    become_method: sudo
+    register: status_apache
+    when: status_apache.status.ActiveState == "active"
+
+  #task 2
+  - name: Renova Certbot - Let's Engrypt
+    ansible.builtin.command:
+      cmd: certbot renew
+    become: yes
+    become_method: sudo
+
+  #task 2.1
+  - name: Convert chave para p12
+    ansible.builtin.command:
+      cmd: openssl
+           pkcs12 -export
+           -in fullchain.pem 
+           -inkey privkey.pem 
+           -out esusaps.p12 
+           -name esusaps 
+           -CAfile chain.pem 
+           -caname esusaps 
+           -passout pass:{{senhap12}}
+    args:
+      chdir: '/etc/letsencrypt/live/{{dominio}}'
+    become: yes
+    become_method: sudo
+    register: p12_gerada
+
+  #task 2.1.1
+  - name: Verifica se esusaps.p12 já existe
+    ansible.builtin.stat:
+    args:
+     name: '/etc/letsencrypt/live/{{dominio}}/esusaps.p12'
+    become: yes
+    become_method: sudo
+    register: p12_exist
+    ignore_errors: true
+
+  #task 2.2
+  - name: Copiar esusaps.12 para e-SUS
+    ansible.builtin.copy:
+      src: /etc/letsencrypt/live/{{dominio}}/esusaps.p12
+      dest: /opt/e-SUS/webserver/config/esusaps.p12
+      owner: root
+      group: root
+      mode: '0644'
+      remote_src: true
+    become: yes
+    become_user: root
+    become_method: sudo
+    when: p12_exist.stat.exists is true
+         
+  #task 3
+  - name: Iniciando Apache
+    ansible.builtin.service:
+      name: apache2.service
+      state: started
+    become: yes
+    become_method: sudo
+    register: status_apache
+
+  #task 4
+  - name: Parando e-SUS
+    ansible.builtin.service:
+      name: e-SUS-PEC.service
+      state: stopped
+    become: yes
+    become_method: sudo
+
+  #task 5
+  - name: Inciando e-SUS
+    ansible.builtin.service:
+      name: e-SUS-PEC.service
+      state: started
+    become: yes
+    become_method: sudo
+...

@@ -1,0 +1,17 @@
+---
+- name: Atualiza versão do e-SUS
+  hosts: '{{target|default("ESUS_PROD")}}'
+#  remote_user: suporte
+  vars:
+    new_version: 5.2.35
+    endereco: https://arquivos.esusab.ufsc.br/PEC/QJZOytQZjokbblfJ/5.2.35/eSUS-AB-PEC-5.2.35-Linux64.jar
+  tasks:
+  - name: Atualiza para versão "{{new_version}}"
+    ansible.builtin.script: ~/atualiza_esus.sh "{{endereco}}" >> ansible.log
+#   ansible.builtin.shell: shutdown -h now
+#    cmd: ls -lha
+    args:
+#     chdir: /~
+     executable: bash
+#     creates: ansible.log
+...
