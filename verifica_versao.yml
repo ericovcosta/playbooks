@@ -1,0 +1,41 @@
+---
+- name: Verifica versão de pacote
+  hosts: '{{target|default("ESUS_PROD")}}'
+  remote_user: '{{user|default("ansible_ssh_user")}}' 
+
+  tasks:
+  #task
+  - name: Verifica versao do OpenSSL
+    ansible.builtin.package_facts:
+      manager: auto
+
+  - name: Mostra pacotes
+    ansible.builtin.debug:
+      var: ansible_facts.packages.openssl[0].version
+
+  - name: Opensssl 1.1.1
+    ansible.builtin.debug:
+      msg: "Open SSL 1.1.1"
+    when: "'1.1.1f-1ubuntu' in ansible_facts.packages.openssl[0].version"
+
+  - name: Opensssl 3
+    ansible.builtin.debug:
+      msg: "Open SSL 3"
+    when: "'3.0' in ansible_facts.packages.openssl[0].version"
+
+
+  #task
+  # - name: Copiar esusaps.12 para e-SUS
+  #   ansible.builtin.copy:
+  #     src: /etc/letsencrypt/live/{{dominio}}/esusaps.p12
+  #     dest: /opt/e-SUS/webserver/config/esusaps.p12
+  #     owner: root
+  #     group: root
+  #     mode: '0644'
+  #     remote_src: true
+  #   become: yes
+  #   become_user: root
+  #   become_method: sudo
+  #   when: p12_exist.stat.exists is true
+             
+...

@@ -5,8 +5,14 @@
   vars:
     senhap12: '{{pw12|default(p12_pw_esus)}}'
     dominio: '{{url|default(url_esus)}}'
+    path_esus: '/opt/e-SUS/webserver/config/'
 
   tasks:
+  #task
+  - name: Verifica versao do OpenSSL
+    ansible.builtin.package_facts:
+      manager: auto
+    
   #task 0
   - name: Verifica Apache
     ansible.builtin.systemd_service:
@@ -41,8 +47,8 @@
            pkcs12 -export
            -in fullchain.pem 
            -inkey privkey.pem 
-           -out esusaps.p12 
-           -name esusaps 
+           -out {{path_esus}}esusaps.p12 
+           -name "esusaps" 
            -CAfile chain.pem 
            -caname esusaps 
            -passout pass:{{senhap12}}
@@ -51,31 +57,72 @@
     become: yes
     become_method: sudo
     register: p12_gerada
+    ignore_errors: true
+    when: "'1.1.1f-1ubuntu' in ansible_facts.packages.openssl[0].version"
+
+  #task 2.1
+  - name: Convert chave para p12:jks
+    ansible.builtin.command:
+      cmd: openssl
+           pkcs12 -export
+           -in fullchain.pem 
+           -inkey privkey.pem 
+           -out {{path_esus}}esusaps.p12 
+           -name "esusaps"
+           -passout pass:{{senhap12}}
+    args:
+      chdir: '/etc/letsencrypt/live/{{dominio}}'
+    become: yes
+    become_method: sudo
+    register: p12_gerada
+    ignore_errors: true
+    when: "'3.0' in ansible_facts.packages.openssl[0].version"
 
   #task 2.1.1
-  - name: Verifica se esusaps.p12 já existe
+  - name: Verifica se esusaps.jks já existe
     ansible.builtin.stat:
     args:
-     name: '/etc/letsencrypt/live/{{dominio}}/esusaps.p12'
+     name: '{{path_esus}}esusaps.jks'
     become: yes
     become_method: sudo
-    register: p12_exist
+    register: jks_exist
     ignore_errors: true
+    when: "'3.0' in ansible_facts.packages.openssl[0].version"
 
-  #task 2.2
-  - name: Copiar esusaps.12 para e-SUS
-    ansible.builtin.copy:
-      src: /etc/letsencrypt/live/{{dominio}}/esusaps.p12
-      dest: /opt/e-SUS/webserver/config/esusaps.p12
-      owner: root
-      group: root
-      mode: '0644'
-      remote_src: true
+  #task 2.1.2
+  - name: Apagar jks
+    ansible.builtin.command:
+      cmd: keytool 
+         -delete -alias esusaps 
+         -keystore {{path_esus}}esusaps.jks
+         -storetype JKS 
+         -storepass {{senhap12}}
     become: yes
-    become_user: root
     become_method: sudo
-    when: p12_exist.stat.exists is true
-         
+    register: jks_gerada
+    ignore_errors: true
+    when:
+      - "'3.0' in ansible_facts.packages.openssl[0].version"
+      - jks_exist.stat.exists is true 
+
+  #task 2.1.2
+  - name: Gerando jks
+    ansible.builtin.command:
+      cmd: keytool 
+          -importkeystore 
+          -srckeystore {{path_esus}}esusaps.p12 
+          -srcstoretype PKCS12 
+          -destkeystore {{path_esus}}esusaps.jks 
+          -deststoretype JKS 
+          -deststorepass {{senhap12}} -srcstorepass {{senhap12}}
+    become: yes
+    become_method: sudo
+    register: jks_gerada
+    ignore_errors: true
+    when:
+      - p12_gerada.changed is true 
+      - "'3.0' in ansible_facts.packages.openssl[0].version"
+
   #task 3
   - name: Iniciando Apache
     ansible.builtin.service:
